@@ -1,85 +1,50 @@
 from flask import Flask, request, redirect, render_template
-import cgi
-import os
- 
+from flask_sqlalchemy import SQLAlchemy
+
 app = Flask(__name__)
 app.config['DEBUG'] = True
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://get-it-done:dog@localhost:8889/get-it-done'
+app.config['SQLALCHEMY_ECHO'] = True
+db = SQLAlchemy(app)
 
-@app.route('/')
+class Task(db.Model):
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120))
+    completed = db.Column(db.Boolean)
+
+    def __init__(self, name):
+        self.name = name
+        self.completed = False
+
+    
+
+@app.route('/', methods=['POST', 'GET'])
 def index():
-    return render_template('hello_form.html')
 
-@app.route("/hello", methods=["POST"])
-def hello():
-    first_name = request.form['first_name']
-    return render_template('hello_greeting.html', name=first_name)
-
-
-@app.route("/validate-time")
-def display_time_form():
-    return render_template('time_form.html')
-
-
-def is_integer(num):
-    try:
-        int(num)
-        return True
-    except ValueError:
-        return False
-
-@app.route("/validate-time", methods=["POST"])
-def validate_time():
-
-    hours = request.form['hours']
-    minutes = request.form['minutes']
-
-    hours_error = ''
-    minutes_error = ''
-
-    if not is_integer(hours):
-        hours_error = 'Not a valid integer'
-        hours = ''
-    else:
-        hours = int(hours)
-        if hours > 23 or hours < 0:
-            hours_error = 'Hour value out of range (0-23)'
-            hours = ''
-
-    if not is_integer(minutes):
-        minutes_error = 'Not a valid integer'
-        minutes = ''
-    else:
-        minutes = int(minutes)
-        if minutes > 59 or minutes < 0:
-            minutes_error = 'Minutes value out of range (0-59)'
-            minutes = ''
-
-    if not minutes_error and not hours_error:
-        time = str(hours) + ':' + str(minutes)
-        return redirect('/valid-time?time={0}'.format(time))
-    else:
-        return render_template('time_form.html', hours_error=hours_error, 
-            minutes_error=minutes_error,
-            hours=hours,
-            minutes=minutes)
-
-
-
-@app.route("/valid-time")
-def valid_time():
-    time = request.args.get('time')
-    return '<h1>You submitted {0}. Thanks for submitting a valid time!</h1>'.format(time)
-
-
-tasks = []
-
-@app.route("/todos", methods=['POST', 'GET'])
-def todos():
 
     if request.method == 'POST':
-        task = request.form['task']
-        tasks.append(task)
+        task_name = request.form['task']
+        new_task = Task(task_name)
+        db.session.add(new_task)
+        db.session.commit()
 
-    return render_template('todos.html', title="TODOs", tasks=tasks)
+    tasks = Task.query.filter_by(completed=False).all()
+    completed_tasks = Task.query.filter_by(completed=True).all()
+    return render_template('todos.html', title="Get It Done!", 
+        tasks=tasks, completed_tasks=completed_tasks)
 
-app.run()
+@app.route('/delete-task', methods=['POST'])
+def delete_task():
+
+    task_id = int(request.form['task-id'])
+    task = Task.query.get(task_id)
+    task.completed = True
+    db.session.add(task)
+    db.session.commit()
+
+    return redirect('/')
+
+
+if __name__ == '__main__':
+    app.run()
